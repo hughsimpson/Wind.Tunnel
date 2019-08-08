@@ -4,6 +4,7 @@ from os import listdir
 from os.path import isfile, join, realpath, dirname
 from pathlib import Path
 from reporter import Reporter
+from util import slurp_auth, merge_dicts
 import json
 import locust.events
 import threading
@@ -28,6 +29,9 @@ class UploadResourcesSet(TaskSet):
                 self.add_request(entry)
 
             return bundle
+
+    def post_auth(self, url, name=None, headers={}, json=None):
+        return self.client.post(url, name=name, headers=merge_dicts(headers, {'Authorization': 'Bearer '+slurp_auth()}), json=json)
 
     def add_request(self, entry):
         if 'id' in entry['resource']:
@@ -59,7 +63,7 @@ class UploadResourcesSet(TaskSet):
         bundle = self.process_bundle(filepath)
 
         print("Uploading %s, %s bundles to go" % (filename, len(files)))
-        self.client.post("/", name="(upload) Synthea bundle", headers={'Content-Type': 'application/json'}, json=bundle)
+        self.post_auth("/", name="(upload) Synthea bundle", headers={'Content-Type': 'application/json'}, json=bundle)
 
 
 class VonkTaskSet(HttpLocust):

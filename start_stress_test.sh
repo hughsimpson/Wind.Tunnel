@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+token="Dummy Token"
+
 export TEST_DATE=$(date "+%Y-%m-%d %H:%M:%S CET")
 export STRESS_TEST="true"
 
@@ -12,9 +14,13 @@ while [[ "$#" > 0 ]]; do case $1 in
   -h|--host) host="$2"; shift;;
   -b|--backend) backend="$2"; shift;;
   -i|--ignore-lock) ignorelock="$2"; shift;;
+  -t|--token) token="$2"; shift;; #TODO: gen token in script. Refresh?
   # -b|--backend) backend=1;;
   *) echo "Unknown parameter passed: $1"; exit 1;;
 esac; shift; done
+
+authHeader=" -H 'Authorization: Bearer $token' "
+echo "$token" >.auth
 
 if ! [[ "$host" =~ ^https?://.+ ]]; then
     echo "--host needs to start with http:// or https://"
@@ -23,29 +29,22 @@ fi
 
 # Ensure only one instance of the performance test is running
 # Credit: https://linuxaria.com/howto/linux-shell-introduction-to-flock
-lock="/tmp/vonk-testing"
-if [[ ! -v ignorelock ]]; then
-  exec 200>$lock
-  flock -n 200
-  if [ $? -ne 0 ]; then
-    echo "Another test is ${bold}already${normal} running - quitting."
-    exit 1
-  fi
-
-  pid=$$
-  echo $pid 1>&200
-fi
-
-
+#lock="/tmp/vonk-testing"
+#if [[ ! -v ignorelock ]]; then
+#  exec 200>$lock
+#  flock -n 200
+#  if [ $? -ne 0 ]; then
+#    echo "Another test is ${bold}already${normal} running - quitting."
+#    exit 1
+#  fi
+#
+#  pid=$$
+#  echo $pid 1>&200
+#fi
 
 # Sanity check that we can connect to Vonk
-test_command="curl -sL \
-    -w "%{http_code}\\n" \
-    "$host/Patient?_format=json" \
-    -o /dev/null \
-    --connect-timeout 10 \
-    --max-time 5"
-if [ $($test_command) != "200" ] ;
+test_command='curl -sL '$authHeader' -w "%{http_code}" "$host/Patient?_format=json" -o /dev/null --connect-timeout 10 --max-time 5'
+if [[ $(eval $test_command) != "200" ]] ;
 then
   echo "Couldn't connect to ${bold}$host${normal} - is server the up, port correct, firewall open, etc.?"
   exit

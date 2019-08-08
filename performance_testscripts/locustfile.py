@@ -3,6 +3,7 @@ from locust.clients import HttpSession
 from locust.exception import ResponseError
 from os import environ as env
 from reporter import Reporter
+from util import slurp_auth
 import datetime
 import locust.events
 import logging
@@ -15,27 +16,28 @@ class VonkTaskSet(TaskSet):
     def setup(self):
         pass
 
+    def get_auth(self, url, name=None):
+        return self.client.get(url, name=name, headers={'Authorization': 'Bearer '+slurp_auth()})
+
     @task(1)
     def patient_with_observations(self):
-        self.client.get("/Patient?identifier=80e5a344-2dec-4794-9ae2-6a4387be47a4&_revinclude=Observation:subject", name="(general) Patient + revinclude observations")
+        self.get_auth("/Patient?identifier=80e5a344-2dec-4794-9ae2-6a4387be47a4&_revinclude=Observation:subject", name="(general) Patient + revinclude observations")
 
     @task(1)
     def patient_with_observations_and_reports(self):
-        self.client.get("/Patient?identifier=80e5a344-2dec-4794-9ae2-6a4387be47a4&_revinclude=Observation:subject&_revinclude=DiagnosticReport:patient", name="(general) Patient + revinclude observations, diagnosticreport")
+        self.get_auth("/Patient?identifier=80e5a344-2dec-4794-9ae2-6a4387be47a4&_revinclude=Observation:subject&_revinclude=DiagnosticReport:patient", name="(general) Patient + revinclude observations, diagnosticreport")
 
     @task(1)
     def one_patient(self):
-        self.client.get("/Patient?name=Esmeralda517",
-                        name="(general) Patient by name")
+        self.get_auth("/Patient?name=Esmeralda517", name="(general) Patient by name")
 
     @task(1)
     def name_and_birthday(self):
-        self.client.get("/Patient?name=Abbott509&birthdate=ge1970",
-                        name="(general) Patients by name and birthday")
+        self.get_auth("/Patient?name=Abbott509&birthdate=ge1970", name="(general) Patients by name and birthday")
 
     @task(1)
     def all_conditions(self):
-        self.client.get("/Condition", name="(general) All Conditions")
+        self.get_auth("/Condition", name="(general) All Conditions")
 
 
 class VonkLocust(HttpLocust):

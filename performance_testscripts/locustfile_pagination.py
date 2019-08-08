@@ -1,6 +1,7 @@
 from locust import HttpLocust, TaskSet, task
 from locust.exception import StopLocust
 from reporter import Reporter
+from util import slurp_auth
 import json
 import locust.events
 
@@ -8,15 +9,18 @@ import locust.events
 
 
 class PageThroughResultsSet(TaskSet):
+    def get_auth(self, url, name=None):
+        return self.client.get(url, name=name, headers={'Authorization': 'Bearer '+slurp_auth()}) #TODO: Add auth header here
+
     def on_start(self):
         self.next_link = ""
 
-        response = self.client.get("/CarePlan?_count=10", name="test_setup").json()
+        response = self.get_auth("/CarePlan?_count=10", name="test_setup").json()
         self.next_link = ([link for link in response['link'] if link['relation'] == 'next'])[0]['url']
 
     @task(1)
     def process_pages(self):
-        response = self.client.get(self.next_link, name="(pagination) Iterate thru /Careplan response (10 items per)").json()
+        response = self.get_auth(self.next_link, name="(pagination) Iterate thru /Careplan response (10 items per)").json()
         next_links = ([link for link in response['link'] if link['relation'] == 'next'])
 
         if len(next_links) >= 1:

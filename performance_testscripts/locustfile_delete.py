@@ -5,6 +5,7 @@ from jsonpath_rw import jsonpath, parse
 import threading
 import math
 from reporter import Reporter
+from util import slurp_auth
 import locust.events
 
 # locust --host=http://localhost:4080 --locustfile=locustfile_pagination.py --no-web --clients=100 --hatch-rate=100  --run-time=5min
@@ -13,11 +14,17 @@ threadLock = threading.Lock()
 
 
 class PageThroughResultsSet(TaskSet):
+    def get_auth(self, url, name=None):
+        return self.client.get(url, name=name, headers={'Authorization': 'Bearer '+slurp_auth()}) #TODO: Add auth header here
+
+    def delete_auth(self, url, name=None):
+        return self.client.delete(url, name=name, headers={'Authorization': 'Bearer '+slurp_auth()}) #TODO: Add auth header here
+
     def setup(self):
         global ids, limit
         ids = []
 
-        bundle = self.client.get("/Patient?_count=50", name="test_setup").json()
+        bundle = self.get_auth("/Patient?_count=50", name="test_setup").json()
         total = [match.value for match in parse("$.total").find(bundle)]
         limit = total[0] / 5
 
@@ -28,7 +35,7 @@ class PageThroughResultsSet(TaskSet):
                 break
 
             next_link = ([link for link in bundle['link'] if link['relation'] == 'next'])[0]['url']
-            bundle = self.client.get(next_link, name="test_setup").json()
+            bundle = self.get_auth(next_link, name="test_setup").json()
 
     @task(1)
     def process_pages(self):
@@ -38,7 +45,7 @@ class PageThroughResultsSet(TaskSet):
             if limit < 0:
                 raise StopLocust()
             else:
-                response = self.client.delete(ids[limit-1], name="(delete) Patient delete")
+                response = self.delete_auth(ids[limit - 1], name="(delete) Patient delete")
                 if response.status_code != 204:
                     print("Unexpected response code on patient delete: {}"
                           .format(response.status_code))

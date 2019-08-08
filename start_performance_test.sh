@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+token="Dummy Token"
 host=http://localhost:4080
 duration=5m
 
@@ -17,8 +18,12 @@ while [[ "$#" > 0 ]]; do case $1 in
   -b|--backend) backend="$2"; shift;;
   -d|--duration) duration="$2"; shift;;
   -i|--influxdb) influxdb="$2"; shift;;
+  -t|--token) token="$2"; shift;; #TODO: gen token in script. Refresh?
   *) echo "Unknown parameter passed: $1"; exit 1;;
 esac; shift; done
+
+authHeader=" -H 'Authorization: Bearer $token' "
+echo "$token" >.auth
 
 # Argument sanity checks
 if [ "$backend" != "mongo" ] && [ "$backend" != "postgres" ] && [ "$backend" != "memory" ] && [ "$backend" != "sqlite" ] && [ "$backend" != "sqlserver" ]; then
@@ -40,40 +45,35 @@ export INFLUXDB=$influxdb
 
 # Ensure only one instance of the performance test is running (locally...)
 # Credit: https://linuxaria.com/howto/linux-shell-introduction-to-flock
-lock="/tmp/performance-testing"
+#lock="/tmp/performance-testing"
 
-exec 200>$lock
-flock -n 200
-if [ $? -ne 0 ]; then
-  echo "Another test is ${bold}already${normal} running - quitting."
-  exit 1
-fi
+#exec 200>$lock
+#flock -n 200
+#if [ $? -ne 0 ]; then
+#  echo "Another test is ${bold}already${normal} running - quitting."
+#  exit 1
+#fi
 
-pid=$$
-echo $pid 1>&200
+#pid=$$
+#echo $pid 1>&200
 
 # Sanity check that we can connect to the server under test
-test_command="curl -sL \
-    -w "%{http_code}\\n" \
-    "$host/Patient?_format=json\&_count=1" \
-    -o /dev/null \
-    --connect-timeout 20 \
-    --max-time 20"
-if [ $($test_command) != "200" ] ;
+test_command='curl -sL '$authHeader' -w "%{http_code}" "$host/Patient?_format=json\&_count=1" -o /dev/null --connect-timeout 20 --max-time 20'
+if [[ $(eval $test_command) != "200" ]] ;
 then
   echo "Couldn't connect to ${bold}$host${normal} - is server the up, port correct, firewall open, etc.?"
   exit
 fi
 
 # Get FHIR and server version
-metadata_statement=$(curl -sk "$host/metadata?_format=json")
+metadata_statement=$(curl $authHeader -sk "$host/metadata?_format=json")
 fhirVersion=$(jq -M -r '"\(.fhirVersion)"' <<< "$metadata_statement")
 serverVersion=$(jq -M -r '"\(.software.version)"' <<< "$metadata_statement")
 
 TEST_NAME="$TEST_DATE v$serverVersion f$fhirVersion"
 
 function report_patient_count {
-  patients_bundle=$(curl -sk "$host/Patient?_format=json")
+  patients_bundle=$(curl $authHeader -sk "$host/Patient?_format=json")
   patient_count=$(jq -M -r '"\(.total)"' <<< "$patients_bundle")
 
   echo "$patient_count patients on the host server."
@@ -103,7 +103,7 @@ locust --locustfile=performance_testscripts/locustfile_delete.py --host=$host --
 sleep 10s
 
 # Re-add the sanity test patient back in
-curl --silent -X POST -d @performance_testscripts/Abbott509_Esmeralda517_51.json -H "Content-Type: application/json" $host > /dev/null
+curl $authHeader --silent -X POST -d @performance_testscripts/Abbott509_Esmeralda517_51.json -H "Content-Type: application/json" $host > /dev/null
 
 echo "After deleting patients:"
 report_patient_count
